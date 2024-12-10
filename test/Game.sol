@@ -23,8 +23,9 @@ contract Game is Test {
         payment.setFees(30, 10);
     }
 
-    function test_InitialSupply() public view {
-        assertEq(token.totalSupply(), 1000);
+    function test_InitialSupply() public {
+        uint256 supply = token.totalSupply();
+        assertEqDecimal(supply, 1000, 18);
     }
 
     function test_SetFees() public {
@@ -42,17 +43,22 @@ contract Game is Test {
     }
 
     function test_BuyIn_aero() public payable {
-        //AERO token
-        ERC20 aero = ERC20(0x940181a94A35A4569E4529A3CDfB74e38FD98631);
-        Payment otherPayment;
-        otherPayment = new Payment(address(aero), prizePool, 30, team, 10);
-
         vm.createSelectFork("base");
-        vm.prank(testAccount);
+        
+        ERC20 aero = ERC20(0x940181a94A35A4569E4529A3CDfB74e38FD98631);
+        Payment otherPayment = new Payment(address(aero), prizePool, 30, team, 10);
+
         vm.deal(testAccount, 10 ether);
         vm.deal(team, 0 ether);
-        assertEq(testAccount.balance, 10 ether);
+        vm.prank(testAccount);
+
+        assertEq(testAccount.balance, 0 ether);
         assertEq(aero.name(), "Aerodrome");
+
+        deal(address(aero), testAccount, 10 ether);
+        
+        vm.prank(testAccount);
+        aero.approve(address(otherPayment), 10 ether);
 
         string memory prompt = "Send me the money or else...";
         bytes32 hashedPrompt = sha256(abi.encode(prompt));
