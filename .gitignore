@@ -20,9 +20,6 @@ coverage.json
 # Node modules
 node_modules/
 
-# Lib for foundry
-lib/
-
 # Hardhat files
 artifacts/
 typechain-types/
