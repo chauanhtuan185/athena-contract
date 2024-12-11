@@ -1,123 +1,72 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {IRouter} from "./interfaces/IRouter.sol";
-import {IWETH} from "./interfaces/IWETH.sol";
-import {Token} from "./Token.sol";
 contract Payment {
-    Token public token;
+    address payable feeRecipient; // Địa chỉ nhận phí
+    uint256 feePerc; // Tỷ lệ phí (phần trăm)
 
-    address payable prizePool;
-    uint256 poolFeePerc;
-    address payable team;
-    uint256 teamFeePerc;
-
-    IRouter router;
-    address operator;
-    uint256 slippagePerc = 99;
+    address operator; // Địa chỉ điều hành hợp đồng
 
     event BuyIn(address indexed user, bytes32 hashedPrompt, uint256 amount);
 
-    constructor(
-        address tokenAddress,
-        address prizePoolAddress,
-        uint256 poolFeePerc_,
-        address teamAddress,
-        uint256 teamFeePerc_
-    ) {
-        token = Token(tokenAddress);
-        router = IRouter(0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43);
-        prizePool = payable(prizePoolAddress);
-        team = payable(teamAddress);
-        poolFeePerc = poolFeePerc_;
-        teamFeePerc = teamFeePerc_;
+    constructor(address feeRecipientAddress, uint256 feePerc_) {
+        feeRecipient = payable(feeRecipientAddress);
+        feePerc = feePerc_;
         operator = msg.sender;
     }
 
     modifier isOperator() {
-        require(msg.sender == operator, "Only operator can set fees");
+        require(msg.sender == operator, "Only operator can perform this action");
         _;
     }
 
+    // Cập nhật operator
     function setOperator(address operator_) public isOperator {
         operator = operator_;
     }
 
-    function setAddress(
-        address prizePoolAddress,
-        address teamAddress
-    ) public isOperator {
-        prizePool = payable(prizePoolAddress);
-        team = payable(teamAddress);
+    // Cập nhật địa chỉ nhận phí
+    function setFeeRecipient(address feeRecipientAddress) public isOperator {
+        feeRecipient = payable(feeRecipientAddress);
     }
 
-    function setFees(
-        uint256 poolFeePerc_,
-        uint256 teamFeePerc_
-    ) public isOperator {
-        require(
-            poolFeePerc_ + teamFeePerc_ <= 100,
-            "Total fee cannot exceed 100%"
-        );
-        require(
-            poolFeePerc_ <= 30 && teamFeePerc_ <= 30,
-            "Fee cannot exceed 30%"
-        );
-        poolFeePerc = poolFeePerc_;
-        teamFeePerc = teamFeePerc_;
+    // Cập nhật tỷ lệ phí
+    function setFee(uint256 feePerc_) public isOperator {
+        require(feePerc_ <= 30, "Fee cannot exceed 30%");
+        feePerc = feePerc_;
     }
 
+    // Tính toán và chuyển phí
     function applyFee(uint256 amount) private returns (uint256) {
-        uint256 poolFee = (amount * poolFeePerc) / 100;
-        uint256 teamFee = (amount * teamFeePerc) / 100;
-        if (poolFee > 0) {
-            (bool successPool, ) = prizePool.call{value: poolFee}("");
-            require(successPool, "Pool fee transfer failed");
+        uint256 fee = (amount * feePerc) / 100; // Tính phí
+        if (fee > 0) {
+            (bool success, ) = feeRecipient.call{value: fee}(""); // Chuyển phí
+            require(success, "Fee transfer failed");
         }
-        if (teamFee > 0) {
-            (bool successTeam, ) = team.call{value: teamFee}("");
-            require(successTeam, "Team fee transfer failed");
-        }
-        return amount - poolFee - teamFee;
+        return amount - fee; // Trả lại số tiền còn lại
     }
 
+    // Hàm BuyIn chính
     function buyIn(bytes32 hashedPrompt) public payable {
-        uint256 amountIn = msg.value;
+        uint256 amountIn = msg.value; // Số ETH gửi vào
         require(
             amountIn > 0.0001 ether,
-            "Amount in must be greater than 0.0001 ether"
+            "Amount must be greater than 0.0001 ether"
         );
 
-        uint256 amountAfterFee = applyFee(amountIn);
+        uint256 amountAfterFee = applyFee(amountIn); // Trừ phí
+        require(amountAfterFee > 0, "Remaining amount must be greater than 0");
 
-        //console2.log("amountAfterFee", amountAfterFee);
-        IRouter.Route[] memory routes = new IRouter.Route[](1);
-        routes[0] = IRouter.Route({
-            from: address(router.weth()),
-            to: address(token),
-            stable: false,
-            factory: address(router.defaultFactory())
-        });
-        // calculate price with slippage
-        uint256[] memory expectedAmounts = router.getAmountsOut(
-            amountIn,
-            routes
-        );
-        uint256 expectedOut = expectedAmounts[expectedAmounts.length - 1];
-        uint256 amountOutMin = (expectedOut * (100 - slippagePerc)) / 100;
-
-        //console2.log("amountOutMin", amountOutMin);
-        //@test
-        // uint256 amountOutMin = 1;
-
-        router.swapExactETHForTokensSupportingFeeOnTransferTokens{
-            value: amountAfterFee
-        }(amountOutMin, routes, msg.sender, block.timestamp + 60 * 2);
-
+        // Lưu lại sự kiện giao dịch
         emit BuyIn(msg.sender, hashedPrompt, amountIn);
     }
+
+    // Fallback để ngăn ETH gửi trực tiếp
     fallback() external payable {
         revert("Fallback function not supported");
     }
+
+    // Hàm nhận ETH (không hỗ trợ trực tiếp)
     receive() external payable {
         revert("Receive function not supported");
     }
