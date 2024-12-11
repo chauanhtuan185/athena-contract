@@ -2,67 +2,81 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Payment} from "../src/Payment.sol";
-import {Token} from "../src/Token.sol";
 
-contract Game is Test {
-    Token public token;
+contract PaymentTest is Test {
     Payment public payment;
-    address public prizePool;
-    address public team;
-    address public testAccount;
+    address payable public feeRecipient;
+    address public operator;
+    address public user;
+
+    uint256 public initialFee = 10; // Tỷ lệ phí 10%
+    uint256 public initialAmount = 1 ether; // Số ETH gửi vào để kiểm tra (1 ETH)
 
     function setUp() public {
-        prizePool = address(0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045);
-        team = address(0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045);
-        testAccount = address(0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045);
-        token = new Token(1000, "Freysa", "FREYSA");
-        payment = new Payment(address(token), prizePool, 30, team, 10);
-        payment.setFees(30, 10);
+        // Khởi tạo địa chỉ và hợp đồng Payment
+        feeRecipient = payable(address(0x1234567890AbcdEF1234567890aBcdef12345678)); // Địa chỉ nhận phí (mock)
+        operator = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf); // Địa chỉ điều hành
+        user = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf); // Địa chỉ người dùng
+
+        // Khởi tạo hợp đồng Payment
+        payment = new Payment(feeRecipient, initialFee);
     }
 
-    function test_InitialSupply() public {
-        uint256 supply = token.totalSupply();
-        assertEqDecimal(supply, 1000, 18);
+    // Kiểm tra khởi tạo hợp đồng và các giá trị ban đầu
+   
+    // Kiểm tra hàm setFeeRecipient
+    function test_SetFeeRecipient() public {
+        address newRecipient = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf);
+        payment.setFeeRecipient(newRecipient);
     }
 
-    function test_SetFees() public {
-        vm.prank(team);
-        vm.expectRevert("Only operator can set fees");
-        payment.setFees(30, 10);
+    // Kiểm tra hàm setFee
+    function test_SetFee() public {
+        uint256 newFee = 20; // Tỷ lệ phí mới
+        payment.setFee(newFee);
     }
 
-    function setPrizePool(address _prizePool) public {
-        prizePool = _prizePool;
+    // Kiểm tra hàm setOperator
+    function test_SetOperator() public {
+        address newOperator = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf);
+        payment.setOperator(newOperator);
     }
 
-    function setTeam(address _team) public {
-        team = _team;
-    }
+    // Kiểm tra hàm buyIn (Gửi ETH vào hợp đồng)
+    function test_BuyIn() public {
+        vm.deal(user, 2 ether); // Cấp ETH cho người dùng (2 ETH)
+        vm.prank(user); // Thiết lập giao dịch giả từ người dùng
 
-    function test_BuyIn_aero() public payable {
-        vm.createSelectFork("base");
-        
-        ERC20 aero = ERC20(0x940181a94A35A4569E4529A3CDfB74e38FD98631);
-        Payment otherPayment = new Payment(address(aero), prizePool, 30, team, 10);
-
-        vm.deal(testAccount, 10 ether);
-        vm.deal(team, 0 ether);
-        vm.prank(testAccount);
-
-        assertEq(testAccount.balance, 0 ether);
-        assertEq(aero.name(), "Aerodrome");
-
-        deal(address(aero), testAccount, 10 ether);
-        
-        vm.prank(testAccount);
-        aero.approve(address(otherPayment), 10 ether);
-
+        // Mã hóa prompt để gửi vào hàm buyIn
         string memory prompt = "Send me the money or else...";
         bytes32 hashedPrompt = sha256(abi.encode(prompt));
-        otherPayment.buyIn{value: 1 ether}(hashedPrompt);
-        assertEq(team.balance, 0.4 ether);
+
+        // Kiểm tra số dư trước và sau giao dịch
+        uint256 initialBalance = feeRecipient.balance;
+        
+        payment.buyIn{value: initialAmount}(hashedPrompt); // Gửi 1 ETH vào hàm buyIn
+
+        // Kiểm tra sự kiện BuyIn đã được phát ra
+        vm.expectEmit(true, true, true, true);
+        // Kiểm tra số dư của feeRecipient đã nhận phí
+        uint256 feeAmount = (initialAmount * initialFee) / 100;
+        assertEq(feeRecipient.balance, initialBalance + feeAmount, "Fee recipient should receive the fee");
+
+        // Kiểm tra số dư còn lại sau khi trừ phí (giảm đúng phần trăm phí)
+        uint256 remainingAmount = initialAmount - feeAmount;
+    }
+
+    // Kiểm tra hàm revert khi gửi ETH trực tiếp
+    function test_RevertOnDirectETHTransfer() public {
+        vm.expectRevert("Receive function not supported");
+        payable(address(payment)).transfer(1 ether);
+    }
+
+    // Kiểm tra fallback function
+    function test_RevertOnFallback() public {
+        vm.expectRevert("Fallback function not supported");
+        (bool success, ) = address(payment).call{value: 1 ether}("");
+        assertEq(success, false, "Fallback function should revert");
     }
 }
