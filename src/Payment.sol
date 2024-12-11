@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.28;
 
 contract Payment {
     address payable feeRecipient; // Địa chỉ nhận phí
@@ -36,7 +36,7 @@ contract Payment {
         feePerc = feePerc_;
     }
 
-    // Tính toán và chuyển phí
+    // 
     function applyFee(uint256 amount) private returns (uint256) {
         uint256 fee = (amount * feePerc) / 100; // Tính phí
         if (fee > 0) {
