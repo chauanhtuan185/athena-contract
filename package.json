@@ -1,5 +1,5 @@
 {
-  "name": "Athena.ai",
+  "name": "Athena Contract",
   "version": "1.0.0",
   "description": "Athena is a decentralized LLM hacking game.",
   "main": "index.js",

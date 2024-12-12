@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.27;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Payment} from "../src/Payment.sol";
@@ -17,7 +17,6 @@ contract PaymentTest is Test {
         feeRecipient = payable(address(0x1234567890AbcdEF1234567890aBcdef12345678)); 
         operator = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf); 
         user = address(0x93347619c007Af45853e19B2DbD6C6E8aA95dCcf); 
-        
         payment = new Payment(feeRecipient, initialFee);
     }
 
@@ -30,7 +29,7 @@ contract PaymentTest is Test {
 
     // Test SetFee
     function test_SetFee() public {
-        uint256 newFee = 20; // Tỷ lệ phí mới
+        uint256 newFee = 20;
         payment.setFee(newFee);
     }
 
