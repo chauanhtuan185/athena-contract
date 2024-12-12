@@ -98,6 +98,14 @@ contract Payment {
         emit BuyIn(msg.sender, hashedPrompt, amountIn);
     }
 
+    /** 
+     * @dev Get blance from pool prize 
+     * @return blance of multisig wallet pool prize 
+     */
+    function getFeeRecipientBalance() public view returns (uint256) {
+        return feeRecipient.balance;
+    }
+    
     /**
      * @dev Fallback function to prevent unintended ETH transfers.
      */
