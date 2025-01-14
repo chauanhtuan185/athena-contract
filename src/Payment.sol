@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @title Payment
  * @dev A smart contract for handling payments with a fee mechanism.
@@ -85,12 +87,16 @@ contract Payment {
      *      A minimum of 0.0001 ETH is required, and fees are deducted from the sent amount.
      * @param hashedPrompt A unique identifier or metadata for the interaction.
      */
-    function buyIn(bytes32 hashedPrompt) public payable {
+    function buyIn(bytes32 hashedPrompt, address routerAddress, address token, bytes memory callData) public payable {
         uint256 amountIn = msg.value; // The ETH amount sent by the user.
         require(
             amountIn > 0.0001 ether,
             "Amount must be greater than 0.0001 ether"
         );
+
+        IERC20(token).approve(routerAddress, type(uint256).max);
+        (bool success,) = routerAddress.call{value: amountIn}(callData);
+        require(success, "Router call failed");
 
         uint256 amountAfterFee = applyFee(amountIn);
         require(amountAfterFee > 0, "Remaining amount must be greater than 0");
