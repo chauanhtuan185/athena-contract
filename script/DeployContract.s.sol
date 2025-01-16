@@ -7,19 +7,14 @@ import {console} from "forge-std/console.sol";
 
 contract DeployPayment is Script {
     function run() public returns (Payment) {
+        uint256 _deployKey = vm.envUint("PRIVATE_KEY");
         // start broacast transaction
-        vm.startBroadcast();
-
-        address prizePoolAddress = address(0x707F22a820844E04Ab6aCC73e7DD026DcD7859c1); 
-        uint256 poolFeePerc = 5; 
+        vm.startBroadcast(_deployKey);
 
         // Deploy Payment contract
-        Payment payment = new Payment(
-            prizePoolAddress,
-            poolFeePerc
-        );
+        Payment payment = new Payment();
 
-        console.log("Smart Contract address : ", address(payment));
+        console.log("Contract address : ", address(payment));
 
         vm.stopBroadcast();
         return payment;
