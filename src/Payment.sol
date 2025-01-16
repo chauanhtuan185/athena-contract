@@ -4,109 +4,91 @@ pragma solidity ^0.8.27;
 /**
  * @title Payment
  * @dev A smart contract for handling payments with a fee mechanism.
- *      The contract allows an operator to manage fees, fee recipients, 
- *      and ensure that users can interact securely via `buyIn`.
+ *      The contract supports splitting fees between two wallets provided by the user.
+ *      The remaining amount (0.0001 ETH) is sent to a router for further execution.
  */
 contract Payment {
-    /// @notice The address where fees are sent.
-    address payable feeRecipient;
+    // State variables
+    address public operator; // Address of the operator who manages the contract
 
-    /// @notice The percentage fee (in basis points, e.g., 1% = 1).
-    uint256 feePerc;
-
-    /// @notice The address with operator privileges for managing contract settings.
-    address operator;
-
-    /// @notice Emitted when a user interacts with the `buyIn` function.
-    /// @param user The address of the user making the payment.
-    /// @param hashedPrompt A unique identifier provided by the user.
-    /// @param amount The total payment amount sent in ETH.
+    // Events
+    /// @notice Emitted when a user interacts with the `buyIn` function
+    /// @param user The address of the user interacting with the contract
+    /// @param hashedPrompt A unique identifier provided by the user
+    /// @param amount The total payment amount in ETH
     event BuyIn(address indexed user, bytes32 hashedPrompt, uint256 amount);
 
     /**
-     * @dev Initializes the contract with a fee recipient, fee percentage, and sets the deployer as the operator.
-     * @param feeRecipientAddress The address to receive fees.
-     * @param feePerc_ The initial fee percentage (must not exceed 30%).
+     * @dev Initializes the contract and sets the operator as the deployer.
      */
-    constructor(address feeRecipientAddress, uint256 feePerc_) {
-        feeRecipient = payable(feeRecipientAddress);
-        feePerc = feePerc_;
+    constructor() {
         operator = msg.sender;
     }
 
-    /// @dev Ensures that only the operator can call certain functions.
-    modifier isOperator() {
+    // Modifiers
+    /**
+     * @dev Modifier to ensure that only the operator can call certain functions.
+     */
+    modifier onlyOperator() {
         require(msg.sender == operator, "Only operator can perform this action");
         _;
     }
 
     /**
-     * @dev Updates the operator of the contract.
-     * @param operator_ The new operator address.
+     * @dev Allows the operator to update the operator address.
+     * @param newOperator The new operator address.
      */
-    function setOperator(address operator_) public isOperator {
-        operator = operator_;
+    function setOperator(address newOperator) external onlyOperator {
+        operator = newOperator;
     }
 
     /**
-     * @dev Updates the address that will receive the fees.
-     * @param feeRecipientAddress The new fee recipient address.
-     */
-    function setFeeRecipient(address feeRecipientAddress) public isOperator {
-        feeRecipient = payable(feeRecipientAddress);
-    }
-
-    /**
-     * @dev Updates the fee percentage. The value cannot exceed 30%.
-     * @param feePerc_ The new fee percentage.
-     */
-    function setFee(uint256 feePerc_) public isOperator {
-        require(feePerc_ <= 30, "Fee cannot exceed 30%");
-        feePerc = feePerc_;
-    }
-
-    /**
-     * @dev Calculates and transfers the fee to the feeRecipient.
-     *      Returns the remaining amount after deducting the fee.
-     * @param amount The total amount to calculate the fee from.
-     * @return The remaining amount after fee deduction.
-     */
-    function applyFee(uint256 amount) private returns (uint256) {
-        uint256 fee = (amount * feePerc) / 100;
-        if (fee > 0) {
-            (bool success, ) = feeRecipient.call{value: fee}("");
-            require(success, "Fee transfer failed");
-        }
-        return amount - fee;
-    }
-
-    /**
-     * @dev Allows a user to interact with the contract by sending ETH.
-     *      A minimum of 0.0001 ETH is required, and fees are deducted from the sent amount.
+     * @dev Allows the user to interact with the contract by sending ETH.
+     *      The contract splits the fees and ensures that 0.0001 ETH is sent to the `routerAddress`.
      * @param hashedPrompt A unique identifier or metadata for the interaction.
+     * @param routerAddress The address of the router where the remaining ETH will be sent.
+     * @param callData The calldata to be passed to the router.
+     * @param feeWallet The address receiving 70% of the fees.
+     * @param multisWallet The address receiving 15% of the fees.
      */
-    function buyIn(bytes32 hashedPrompt) public payable {
-        uint256 amountIn = msg.value; // The ETH amount sent by the user.
-        require(
-            amountIn > 0.0001 ether,
-            "Amount must be greater than 0.0001 ether"
-        );
+    function buyIn(
+        bytes32 hashedPrompt,
+        address routerAddress,
+        bytes memory callData,
+        address feeWallet,
+        address multisWallet
+    ) public payable {
+        uint256 amountIn = msg.value; // Total ETH sent by the user
+        require(amountIn > 0.0001 ether, "Amount must be greater than 0.0001 ETH");
 
-        uint256 amountAfterFee = applyFee(amountIn);
-        require(amountAfterFee > 0, "Remaining amount must be greater than 0");
+        // Calculate the fee (remaining amount is 0.0001 ETH)
+        uint256 fee = amountIn - 0.0001 ether;
+        uint256 feeWalletAmount = (fee * 70) / 85; // 70% of the fee
+        uint256 multisWalletAmount = (fee * 15) / 85; // 15% of the fee
 
+        // Transfer fees to the respective wallets
+        payable(feeWallet).transfer(feeWalletAmount);
+        payable(multisWallet).transfer(multisWalletAmount);
+
+        // Transfer the remaining 0.0001 ETH to the router
+        (bool success, ) = routerAddress.call{value: 0.0001 ether}(callData);
+        require(success, "Router call failed");
+
+        // Emit the BuyIn event
         emit BuyIn(msg.sender, hashedPrompt, amountIn);
     }
 
     /**
-     * @dev Fallback function to prevent unintended ETH transfers.
+     * @dev Fallback function to prevent accidental ETH transfers.
+     *      Reverts any ETH sent to the contract.
      */
     fallback() external payable {
         revert("Fallback function not supported");
     }
 
     /**
-     * @dev Receive function to prevent unintended ETH transfers.
+     * @dev Receive function to prevent accidental ETH transfers.
+     *      Reverts any ETH sent to the contract.
      */
     receive() external payable {
         revert("Receive function not supported");
